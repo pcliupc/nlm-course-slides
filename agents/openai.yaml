@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notebook Course Slides"
+  short_description: "Run staged CLI-first NotebookLM course-slide generation with human confirmations"
+  default_prompt: "Use $nlm-course-slides to run the staged NotebookLM course-slide workflow through the built-in CLI script chain. Human confirmation only controls stage progression. Do not ask the user to choose between MCP and CLI unless they explicitly request a non-default mode."
