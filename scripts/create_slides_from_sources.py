@@ -17,6 +17,8 @@ from common import (
     create_slide_deck,
     ensure_authenticated,
     find_section,
+    extract_focus_title,
+    focus_preview,
     load_course_manifest,
     read_json,
     sanitize_filename,
@@ -100,6 +102,14 @@ def main() -> int:
             continue
 
         section = find_section(manifest, section_id)
+        focus = section.focus or build_focus_prompt(section.title)
+        focus_source = "manifest" if section.focus else "template"
+        focus_metadata = {
+            "focus_present": bool(focus.strip()),
+            "focus_source": focus_source,
+            "focus_title": extract_focus_title(focus),
+            "focus_preview": focus_preview(focus),
+        }
         source_id = item.get("source_id")
         if item.get("status") != "uploaded" or not isinstance(source_id, str) or not source_id.strip():
             results.append(
@@ -110,6 +120,7 @@ def main() -> int:
                     "artifact_id": None,
                     "status": "skipped",
                     "error": item.get("error"),
+                    **focus_metadata,
                 }
             )
             continue
@@ -118,7 +129,7 @@ def main() -> int:
             artifact_id = create_slide_deck(
                 notebook_id,
                 source_id=source_id,
-                focus=section.focus or build_focus_prompt(section.title),
+                focus=focus,
                 language=args.language,
                 deck_format=args.deck_format,
                 length=args.length,
@@ -134,6 +145,7 @@ def main() -> int:
                     "artifact_id": artifact_id,
                     "status": "create_requested",
                     "error": None,
+                    **focus_metadata,
                 }
             )
         except Exception as exc:
@@ -146,6 +158,7 @@ def main() -> int:
                     "artifact_id": None,
                     "status": "failed_create",
                     "error": str(exc),
+                    **focus_metadata,
                 }
             )
         if created_count + failures < eligible_create_count:

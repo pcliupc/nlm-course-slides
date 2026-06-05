@@ -147,6 +147,26 @@ def build_focus_prompt(title: str) -> str:
     return FOCUS_PROMPT_TEMPLATE.format(section_title=strip_section_prefix(title))
 
 
+def extract_focus_title(focus: str | None) -> str | None:
+    if not focus:
+        return None
+    match = PROMPT_TITLE_RE.search(focus)
+    if not match:
+        return None
+    return match.group(1).strip() or None
+
+
+def focus_preview(focus: str | None, *, limit: int = 120) -> str | None:
+    if not focus:
+        return None
+    normalized = re.sub(r"\s+", " ", focus).strip()
+    if not normalized:
+        return None
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1].rstrip() + "…"
+
+
 def parse_first_uuid(text: str) -> str:
     match = UUID_RE.search(text)
     if not match:

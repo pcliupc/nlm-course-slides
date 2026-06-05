@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-from common import load_course_manifest, sanitize_filename, write_json
+from common import build_focus_prompt, load_course_manifest, sanitize_filename, write_json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", help="Directory containing PPTX files")
     parser.add_argument("--report-path", help="Optional JSON report path")
     parser.add_argument("--require-sidecar", action="store_true")
+    parser.add_argument("--require-focus", action="store_true")
     return parser
 
 
@@ -38,6 +39,8 @@ def main() -> int:
     empty = []
     sidecar_missing = []
     metadata_mismatch = []
+    missing_focus_metadata = []
+    focus_mismatch = []
 
     for output_name, section in expected.items():
         pptx_path = output_dir / output_name
@@ -51,6 +54,14 @@ def main() -> int:
         if not sidecar_path.exists():
             if args.require_sidecar:
                 sidecar_missing.append(str(sidecar_path))
+            if args.require_focus:
+                missing_focus_metadata.append(
+                    {
+                        "section_id": section.id,
+                        "path": str(sidecar_path),
+                        "reason": "missing-sidecar",
+                    }
+                )
             continue
 
         data = json.loads(sidecar_path.read_text(encoding="utf-8"))
@@ -64,6 +75,26 @@ def main() -> int:
                     "actual_output_name": data.get("output_name"),
                 }
             )
+        if args.require_focus:
+            expected_focus = section.focus or build_focus_prompt(section.title)
+            actual_focus = data.get("focus")
+            if not isinstance(actual_focus, str) or not actual_focus.strip():
+                missing_focus_metadata.append(
+                    {
+                        "section_id": section.id,
+                        "path": str(sidecar_path),
+                        "reason": "missing-focus",
+                    }
+                )
+            elif actual_focus.strip() != expected_focus:
+                focus_mismatch.append(
+                    {
+                        "section_id": section.id,
+                        "path": str(sidecar_path),
+                        "expected_focus": expected_focus,
+                        "actual_focus": actual_focus.strip(),
+                    }
+                )
 
     actual_pptx = {path.name for path in output_dir.glob("*.pptx")}
     extra_files = sorted(actual_pptx - set(expected))
@@ -79,6 +110,8 @@ def main() -> int:
         "duplicate_expected_names": sorted(set(duplicate_names)),
         "missing_sidecars": sidecar_missing,
         "metadata_mismatch": metadata_mismatch,
+        "missing_focus_metadata": missing_focus_metadata,
+        "focus_mismatch": focus_mismatch,
         "extra_files": extra_files,
     }
 
@@ -93,6 +126,8 @@ def main() -> int:
             duplicate_names,
             sidecar_missing,
             metadata_mismatch,
+            missing_focus_metadata,
+            focus_mismatch,
         ]
     )
     return 1 if has_errors else 0

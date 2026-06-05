@@ -20,7 +20,9 @@ from common import (
     default_resource_title,
     download_slide_deck,
     ensure_authenticated,
+    extract_focus_title,
     find_section,
+    focus_preview,
     load_course_manifest,
     log_message,
     rename_artifact,
@@ -104,6 +106,7 @@ def main() -> int:
     resource_title = args.resource_title or section.resource_title or default_resource_title(section.id, section.title)
     artifact_title = Path(output_name).stem
     focus = args.focus or section.focus or build_focus_prompt(section.title)
+    focus_source = "cli_arg" if args.focus else "manifest" if section.focus else "template"
     source_id = None
     artifact_id = None
     current_step = "initialize"
@@ -221,6 +224,9 @@ def main() -> int:
             "section_title": section.title,
             "resource_title": resource_title,
             "focus": focus,
+            "focus_source": focus_source,
+            "focus_title": extract_focus_title(focus),
+            "focus_preview": focus_preview(focus),
             "notebook_id": args.notebook_id,
             "source_id": source_id,
             "artifact_id": artifact_id,
@@ -245,6 +251,9 @@ def main() -> int:
             "section_title": section.title,
             "resource_title": resource_title,
             "focus": focus,
+            "focus_source": focus_source,
+            "focus_title": extract_focus_title(focus),
+            "focus_preview": focus_preview(focus),
             "notebook_id": args.notebook_id,
             "source_id": source_id,
             "artifact_id": artifact_id,

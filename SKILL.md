@@ -11,6 +11,8 @@ description: Run a staged, human-confirmed NotebookLM course-slides workflow fro
 
 本 skill 固定使用 CLI 和本地脚本链执行 NotebookLM 流程。不要在任何阶段询问用户选择 `MCP` 还是 `CLI`。阶段确认只用于决定是否继续，不用于决定执行通道。
 
+不要绕过本 skill 的脚本链直接调用 NotebookLM MCP 的 `studio_create`、slides 创建接口或其他等价远端创建入口。原因：本 skill 的版式约束依赖本地脚本注入的 `focus_prompt`，绕开脚本会让提示词 contract 丢失，生成结果失真。
+
 默认流程分为 7 个阶段：
 
 1. 阶段 A：获取课程 JSON 到本地
@@ -29,6 +31,7 @@ description: Run a staged, human-confirmed NotebookLM course-slides workflow fro
 - 默认执行通道固定为 CLI。除非用户明确要求别的方式，否则后续阶段一律沿用 CLI 脚本链。
 - 用户未提供 `notebook_id` 时，在阶段 C 上传前自动创建 notebook，并把 notebook 标题与 notebook ID 汇报给用户。
 - 现有 `generate_course_slides.py` / `generate_section_slides.py` 保留，但仅作为手动高级入口，不是默认推荐路径。
+- 默认 slide 生成 prompt contract 由 `scripts/common.py` 中的模板统一生成，并经 `scripts/create_slides_from_sources.py` 注入到 `nlm slides create --focus ...`。如果没有走到这条路径，本轮执行应视为偏离 skill。
 
 ## Prerequisites
 
@@ -174,9 +177,11 @@ python3 scripts/create_slides_from_sources.py \
 - 每次 create 之间固定延迟 `10` 秒。
 - 允许 notebook 内同时存在多个远端生成中的 slide。
 - 本阶段固定沿用 CLI 脚本链执行，不重新选择工具方式。
+- 禁止直接调用 NotebookLM MCP / `studio_create` / 任何等价远端 slides 创建接口来替代本脚本。
 - 如果某个 create 失败，先记录，不要在脚本内暂停。
 - 阶段结束后汇报成功项/失败项。
 - 如果有失败项，停下来询问用户是否只重试失败项。
+- 阶段结束后必须检查 `create-report.json` 中每个成功或失败条目的 `focus_present`、`focus_source`、`focus_title`、`focus_preview`。如果任一条目缺失这些字段，或 `focus_present != true`，不要继续阶段 E，直接判定为执行偏离并回到本脚本重跑阶段 D。
 
 阶段产物：
 
@@ -190,6 +195,10 @@ python3 scripts/create_slides_from_sources.py \
 - `artifact_id`
 - `status`
 - `error`
+- `focus_present`
+- `focus_source`
+- `focus_title`
+- `focus_preview`
 
 仅重试失败项时使用：
 
@@ -266,6 +275,16 @@ python3 scripts/summarize_course_slide_status.py \
   /path/to/course.json
 ```
 
+默认验收命令：
+
+```bash
+python3 scripts/verify_course_slides.py \
+  /path/to/course.json \
+  --output-dir /path/to/course-output \
+  --require-sidecar \
+  --require-focus
+```
+
 阶段产物：
 
 - `course-status-summary.json`
@@ -275,6 +294,7 @@ python3 scripts/summarize_course_slide_status.py \
 - 每个 section 的当前综合状态
 - 失败项列表
 - 可重试项列表
+- `verify_course_slides.py --require-sidecar --require-focus` 的校验结果；如果出现 `missing_sidecars`、`missing_focus_metadata` 或 `focus_mismatch`，明确告诉用户本轮产物不满足 skill 的 prompt contract
 
 结束时引导用户决定：
 
@@ -314,6 +334,7 @@ python3 scripts/summarize_course_slide_status.py \
 - 下载阶段：默认关闭，仅用户明确要求时执行，失败自动重试 `3` 次。
 - 失败项优先通过对应阶段 report 进行定向重试，不要默认整课重跑。
 - 不要自动删除 notebook、source 或 artifact。
+- 凡是要创建 slides，都必须能在本地产物中回溯到 `focus` 元数据；回溯不到时，优先判定为执行通道偏离，而不是继续修补后续阶段。
 
 ## Manual Advanced Entry
 
