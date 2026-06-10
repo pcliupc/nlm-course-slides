@@ -441,7 +441,8 @@ def add_text_source(
     ]
     if profile:
         args.extend(["--profile", profile])
-    args.extend([notebook_id, text])
+    # Stop option parsing so section content that starts with "-" is treated as text.
+    args.extend(["--", notebook_id, text])
     output = run_cmd(args, dry_run=dry_run)
     return "dry-run-source-id" if dry_run else parse_first_uuid(output)
 
@@ -1068,14 +1069,26 @@ def _load_fira_course_manifest(data: dict[str, Any], source: Path) -> CourseMani
 
 
 def extract_fira_section_content(section_data: dict[str, Any]) -> str:
-    preferred_texts: list[str] = []
-    fallback_texts: list[str] = []
+    verticals = [
+        vertical
+        for vertical in (section_data.get("verticals") or [])
+        if isinstance(vertical, dict)
+    ]
 
-    for vertical in section_data.get("verticals") or []:
-        if not isinstance(vertical, dict):
-            continue
-        vertical_name = str(vertical.get("name") or "").strip()
-        texts = []
+    def collect_imagesgallery_texts(vertical: dict[str, Any]) -> list[str]:
+        texts: list[str] = []
+        for block in vertical.get("blocks") or []:
+            if not isinstance(block, dict):
+                continue
+            if block.get("category") != "imagesgallery":
+                continue
+            text = str(block.get("text") or "").strip()
+            if text:
+                texts.append(text)
+        return texts
+
+    def collect_legacy_texts(vertical: dict[str, Any]) -> list[str]:
+        texts: list[str] = []
         for block in vertical.get("blocks") or []:
             if not isinstance(block, dict):
                 continue
@@ -1084,13 +1097,26 @@ def extract_fira_section_content(section_data: dict[str, Any]) -> str:
             text = str(block.get("text") or "").strip()
             if text:
                 texts.append(text)
-        if not texts:
-            continue
-        fallback_texts.extend(texts)
-        if "训战" not in vertical_name:
-            preferred_texts.extend(texts)
+        return texts
 
-    texts = preferred_texts or fallback_texts
+    has_imagesgallery = any(collect_imagesgallery_texts(vertical) for vertical in verticals)
+    if has_imagesgallery:
+        if not verticals:
+            return ""
+        return "\n\n".join(collect_imagesgallery_texts(verticals[0])).strip()
+
+    preferred_legacy_texts: list[str] = []
+    fallback_legacy_texts: list[str] = []
+    for vertical in verticals:
+        vertical_name = str(vertical.get("name") or "").strip()
+        legacy_texts = collect_legacy_texts(vertical)
+        if not legacy_texts:
+            continue
+        if "训战" not in vertical_name:
+            preferred_legacy_texts.extend(legacy_texts)
+        fallback_legacy_texts.extend(legacy_texts)
+
+    texts = preferred_legacy_texts or fallback_legacy_texts
     return "\n\n".join(texts).strip()
 
 

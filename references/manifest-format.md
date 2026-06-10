@@ -9,7 +9,9 @@ The scripts can read the exported FIRA course JSON directly.
 - Root title: `name`
 - Chapters: `chapters`
 - Section title: `chapters[].sections[].name`
-- Slide source text: `chapters[].sections[].verticals[].blocks[]` where `name == "文字讲解"`
+- Slide source text:
+  - If the section contains any `category == "imagesgallery"` block with non-empty `text`, treat it as an image-gallery section and use only the first `vertical`'s `imagesgallery.text`
+  - Otherwise, use `chapters[].sections[].verticals[].blocks[]` where `name == "文字讲解"`
 
 Built-in filtering rules for this format:
 
@@ -17,7 +19,8 @@ Built-in filtering rules for this format:
 - Skip the chapter named `训战总结、训战输出`
 - Skip the chapter named `满意度调查`
 - Skip the first section of every remaining chapter, which is usually the `概述`
-- Prefer `文字讲解` blocks under non-`训战` verticals; only fall back to other `文字讲解` blocks if needed
+- For image-gallery sections, ignore every `vertical` except the first one; do not fall back to any `文字讲解`
+- For legacy sections without `imagesgallery`, prefer non-`训战` `verticals` over `训战` `verticals`
 
 Example:
 
